@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trasabilidad Interna Operario v.1 (versión anterior) — Seguimiento de Casos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar__brand">
+    <span class="topbar__logo">🧬</span>
+    <div>
+      <h1>Trasabilidad Interna Operario v.1</h1>
+      <span class="topbar__subtitle">by Nicolás Zúñiga · versión anterior (Ct por muestra, peso a nivel de caso)</span>
+    </div>
+  </div>
+  <nav class="topbar__nav">
+    <button class="nav-btn nav-btn--active" data-view="cases">📋 Casos</button>
+    <button class="nav-btn" data-view="dashboard">📊 Dashboard</button>
+    <button class="nav-btn" data-view="pathologies">🧫 Patologías</button>
+  </nav>
+</header>
+
+<main class="main">
+
+  <!-- ===================== VISTA: CASOS ===================== -->
+  <section id="view-cases" class="view">
+
+    <div class="summary-cards" id="summary-cards">
+      <div class="card">
+        <span class="card__label">Total Casos</span>
+        <span class="card__value" id="stat-total-cases">0</span>
+      </div>
+      <div class="card">
+        <span class="card__label">Total Muestras</span>
+        <span class="card__value" id="stat-total-samples">0</span>
+      </div>
+      <div class="card card--positive">
+        <span class="card__label">Total Positivos</span>
+        <span class="card__value" id="stat-total-positive">0</span>
+      </div>
+      <div class="card card--negative">
+        <span class="card__label">Total Negativos</span>
+        <span class="card__value" id="stat-total-negative">0</span>
+      </div>
+      <div class="card">
+        <span class="card__label">Patología más frecuente</span>
+        <span class="card__value card__value--small" id="stat-top-pathology">—</span>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <input type="search" id="search-input" class="input" placeholder="🔍 Buscar por N° de caso o cliente…">
+
+      <select id="filter-client" class="input">
+        <option value="">Cliente: todos</option>
+      </select>
+
+      <input type="date" id="filter-date" class="input" title="Filtrar por fecha">
+
+      <select id="filter-pathology" class="input">
+        <option value="">Patología: todas</option>
+      </select>
+
+      <select id="filter-positives" class="input">
+        <option value="">Positivos: todos</option>
+        <option value="with">Con positivos</option>
+        <option value="without">Sin positivos</option>
+      </select>
+
+      <select id="filter-negatives" class="input">
+        <option value="">Negativos: todos</option>
+        <option value="with">Con negativos</option>
+        <option value="without">Sin negativos</option>
+      </select>
+
+      <button id="btn-clear-filters" class="btn btn--ghost">Limpiar filtros</button>
+
+      <div class="toolbar__spacer"></div>
+
+      <div class="export-group">
+        <button id="export-xlsx" class="btn btn--outline">Excel</button>
+        <button id="export-csv" class="btn btn--outline">CSV</button>
+        <button id="export-pdf" class="btn btn--outline">PDF</button>
+      </div>
+
+      <button id="btn-new-case" class="btn btn--primary">+ Nuevo Caso</button>
+    </div>
+
+    <div class="table-wrapper card-surface">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>N° Caso</th>
+            <th>Fecha</th>
+            <th>Cliente</th>
+            <th>N° Muestras</th>
+            <th>Patologías</th>
+            <th>Positivos</th>
+            <th>Negativos</th>
+            <th>Estado</th>
+            <th class="col-actions">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="cases-tbody"></tbody>
+      </table>
+      <p id="cases-empty" class="empty-state" hidden>No hay casos que coincidan con la búsqueda.</p>
+    </div>
+  </section>
+
+  <!-- ===================== VISTA: DASHBOARD ===================== -->
+  <section id="view-dashboard" class="view" hidden>
+    <div class="charts-grid">
+      <div class="chart-card card-surface">
+        <h3>Casos por mes</h3>
+        <div class="chart-holder"><canvas id="chart-cases-by-month"></canvas></div>
+      </div>
+      <div class="chart-card card-surface">
+        <h3>Patologías más solicitadas</h3>
+        <div class="chart-holder"><canvas id="chart-top-pathologies"></canvas></div>
+      </div>
+      <div class="chart-card card-surface">
+        <h3>Positivos por patología</h3>
+        <div class="chart-holder"><canvas id="chart-positives-by-pathology"></canvas></div>
+      </div>
+      <div class="chart-card card-surface">
+        <h3>Porcentaje de positivos</h3>
+        <div class="chart-holder"><canvas id="chart-positive-percentage"></canvas></div>
+      </div>
+      <div class="chart-card card-surface chart-card--wide">
+        <h3>Distribución de Ct</h3>
+        <div class="chart-holder"><canvas id="chart-ct-distribution"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== VISTA: PATOLOGÍAS ===================== -->
+  <section id="view-pathologies" class="view" hidden>
+    <div class="toolbar">
+      <input type="search" id="pathology-search" class="input" placeholder="🔍 Buscar patología…">
+      <select id="pathology-sort" class="input">
+        <option value="name-asc">Nombre A-Z</option>
+        <option value="name-desc">Nombre Z-A</option>
+        <option value="ct-asc">Ct de corte ↑</option>
+        <option value="ct-desc">Ct de corte ↓</option>
+      </select>
+      <div class="toolbar__spacer"></div>
+      <button id="btn-new-pathology" class="btn btn--primary">+ Nueva Patología</button>
+    </div>
+
+    <div class="table-wrapper card-surface">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Ct de corte</th>
+            <th>Zona gris (±Ct)</th>
+            <th>Descripción</th>
+            <th>Estado</th>
+            <th class="col-actions">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="pathologies-tbody"></tbody>
+      </table>
+      <p id="pathologies-empty" class="empty-state" hidden>No hay patologías registradas.</p>
+    </div>
+  </section>
+
+</main>
+
+<!-- ===================== MODAL: NUEVO / EDITAR CASO ===================== -->
+<div class="modal-overlay" id="modal-case">
+  <div class="modal modal--wide">
+    <div class="modal__header">
+      <h2 id="case-modal-title">Nuevo Caso</h2>
+      <button class="modal__close" data-close="modal-case">✕</button>
+    </div>
+    <form id="case-form" class="modal__body" novalidate>
+      <input type="hidden" id="case-id">
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="case-number">N° de Caso *</label>
+          <input type="text" id="case-number" required>
+          <small class="field-error"></small>
+        </div>
+        <div class="field">
+          <label for="case-date">Fecha *</label>
+          <input type="date" id="case-date" required>
+          <small class="field-error"></small>
+        </div>
+        <div class="field">
+          <label for="case-client">Cliente *</label>
+          <input type="text" id="case-client" required placeholder="Ej: Salmones Austral">
+          <small class="field-error"></small>
+        </div>
+        <div class="field">
+          <label for="case-samples">N° de Muestras *</label>
+          <input type="number" id="case-samples" min="1" required>
+          <small class="field-error"></small>
+        </div>
+        <div class="field">
+          <label for="case-matrix">Matriz (tejido)</label>
+          <select id="case-matrix">
+            <option value="">— Seleccionar —</option>
+            <option>Riñón</option>
+            <option>Bazo</option>
+            <option>Branquia</option>
+            <option>Mucus</option>
+            <option>Sangre</option>
+            <option>Hígado</option>
+            <option>Corazón</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="case-weight">Peso (g)</label>
+          <input type="number" id="case-weight" min="0" step="0.1" placeholder="Ej: 45.5">
+        </div>
+        <div class="field">
+          <label for="case-status">Estado</label>
+          <select id="case-status">
+            <option value="Pendiente">Pendiente</option>
+            <option value="En Proceso">En Proceso</option>
+            <option value="Finalizado">Finalizado</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="case-observations">Observaciones</label>
+        <textarea id="case-observations" rows="2"></textarea>
+      </div>
+
+      <div class="section-divider">
+        <h3>Patologías Analizadas</h3>
+        <button type="button" id="btn-add-pathology-row" class="btn btn--outline btn--small" disabled>+ Agregar Patología</button>
+      </div>
+      <p id="matrix-hint" class="field-hint">Indica el N° de Muestras para habilitar una celda de Ct por cada una.</p>
+
+      <div class="table-wrapper ct-matrix-wrapper">
+        <table class="data-table ct-matrix">
+          <thead>
+            <tr id="ct-matrix-head-row">
+              <th>Patología</th>
+              <th>Ct corte</th>
+              <th class="ct-col-obs">Observaciones</th>
+              <th class="ct-col-remove"></th>
+            </tr>
+          </thead>
+          <tbody id="pathology-rows"></tbody>
+        </table>
+      </div>
+      <p id="pathology-rows-empty" class="empty-state">Agrega al menos una patología analizada.</p>
+
+      <div class="modal__footer">
+        <button type="button" class="btn btn--ghost" data-close="modal-case">Cancelar</button>
+        <button type="submit" class="btn btn--primary">Guardar Caso</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== MODAL: VER CASO ===================== -->
+<div class="modal-overlay" id="modal-view-case">
+  <div class="modal modal--wide">
+    <div class="modal__header">
+      <h2>Detalle del Caso</h2>
+      <button class="modal__close" data-close="modal-view-case">✕</button>
+    </div>
+    <div class="modal__body" id="view-case-body"></div>
+    <div class="modal__footer">
+      <button class="btn btn--primary" data-close="modal-view-case">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: NUEVA / EDITAR PATOLOGÍA ===================== -->
+<div class="modal-overlay" id="modal-pathology">
+  <div class="modal">
+    <div class="modal__header">
+      <h2 id="pathology-modal-title">Nueva Patología</h2>
+      <button class="modal__close" data-close="modal-pathology">✕</button>
+    </div>
+    <form id="pathology-form" class="modal__body" novalidate>
+      <input type="hidden" id="pathology-id">
+      <div class="field">
+        <label for="pathology-name">Nombre *</label>
+        <input type="text" id="pathology-name" required>
+        <small class="field-error"></small>
+      </div>
+      <div class="field">
+        <label for="pathology-cutoff">Ct de corte *</label>
+        <input type="number" step="0.01" id="pathology-cutoff" required>
+        <small class="field-error"></small>
+      </div>
+      <div class="form-grid">
+        <div class="field">
+          <label for="pathology-ct-lower">Incertidumbre inferior (±Ct)</label>
+          <input type="number" step="0.01" min="0" id="pathology-ct-lower" value="0">
+        </div>
+        <div class="field">
+          <label for="pathology-ct-upper">Incertidumbre superior (±Ct)</label>
+          <input type="number" step="0.01" min="0" id="pathology-ct-upper" value="0">
+        </div>
+      </div>
+      <p class="field-hint">Un Ct obtenido dentro de este rango alrededor del Ct de corte se marcará como <strong>Observar</strong> (zona gris) en vez de Positivo/Negativo.</p>
+      <div class="field">
+        <label for="pathology-description">Descripción</label>
+        <textarea id="pathology-description" rows="2"></textarea>
+      </div>
+      <div class="field">
+        <label for="pathology-status">Estado</label>
+        <select id="pathology-status">
+          <option value="Activo">Activo</option>
+          <option value="Inactivo">Inactivo</option>
+        </select>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn--ghost" data-close="modal-pathology">Cancelar</button>
+        <button type="submit" class="btn btn--primary">Guardar Patología</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== MODAL: CONFIRMACIÓN GENÉRICA ===================== -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal modal--small">
+    <div class="modal__header">
+      <h2>Confirmar</h2>
+    </div>
+    <div class="modal__body">¿Está seguro?</div>
+    <div class="modal__footer">
+      <button class="btn btn--ghost" id="confirm-no">Cancelar</button>
+      <button class="btn btn--danger" id="confirm-yes">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+
+<!-- Librerías externas (CDN) solo para lo que no tiene sentido reescribir a mano -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+
+<script src="utils.js"></script>
+<script src="db.js"></script>
+<script src="charts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
