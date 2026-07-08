@@ -9,8 +9,17 @@
 <script>
 // ponytail: smoke test for the non-trivial bits (Ct→resultado logic, DB CRUD roundtrip).
 // No framework, run by opening this file directly in a browser.
+// CRÍTICO: este self-check NUNCA debe tocar lims_cases_v1 / lims_pathologies_v1
+// (las claves reales de la app vigente). Se redirige STORAGE_KEYS a claves de
+// scratch dedicadas antes de tocar cualquier localStorage.
+STORAGE_KEYS.CASES = 'lims_cases_selftest';
+STORAGE_KEYS.PATHOLOGIES = 'lims_pathologies_selftest';
+
 const results = [];
 function check(label, cond) { results.push(`${cond ? 'PASS' : 'FAIL'} — ${label}`); }
+
+check('El self-check está aislado de las claves reales de producción',
+  STORAGE_KEYS.CASES !== 'lims_cases_v1' && STORAGE_KEYS.PATHOLOGIES !== 'lims_pathologies_v1');
 
 // Ct cutoff logic (sin incertidumbre, debe igualar la regla original)
 check('Ct obtenido == cutoff => POSITIVO', Utils.calculateResult(35, 35) === 'POSITIVO');
@@ -25,8 +34,8 @@ check('Ct justo sobre el límite superior => NEGATIVO', Utils.calculateResult(36
 check('Ct en el borde superior de la zona gris => OBSERVAR', Utils.calculateResult(36, 35, 1, 1) === 'OBSERVAR');
 
 // localStorage reset for a clean run
-localStorage.removeItem('lims_cases_v1');
-localStorage.removeItem('lims_pathologies_v1');
+localStorage.removeItem(STORAGE_KEYS.CASES);
+localStorage.removeItem(STORAGE_KEYS.PATHOLOGIES);
 DB.init();
 
 const pathologies = DB.pathologies.getAll();
@@ -75,8 +84,8 @@ DB.cases.remove(created.id);
 check('DB.cases.remove elimina el caso', DB.cases.getAll().length === 0);
 
 // limpieza para no dejar datos de prueba en el storage real
-localStorage.removeItem('lims_cases_v1');
-localStorage.removeItem('lims_pathologies_v1');
+localStorage.removeItem(STORAGE_KEYS.CASES);
+localStorage.removeItem(STORAGE_KEYS.PATHOLOGIES);
 
 document.getElementById('out').textContent = results.join('\n') +
   `\n\n${results.every((r) => r.startsWith('PASS')) ? 'TODO OK' : 'HAY FALLOS'}`;
