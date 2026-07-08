@@ -548,15 +548,22 @@ function validateCaseForm(pathologyRows) {
     }
   });
 
-  if (pathologyRows.length === 0) {
-    Utils.toast('Agrega al menos una patología analizada.', 'error');
-    valid = false;
-  } else if (pathologyRows.some((p) => !p.pathologyId)) {
+  if (pathologyRows.some((p) => !p.pathologyId)) {
     Utils.toast('Selecciona una patología válida en cada fila.', 'error');
     valid = false;
-  } else if (pathologyRows.some((p) => p.samples.some((s) => s.ctObtained === null))) {
-    Utils.toast('Completa el Ct de todas las muestras en cada patología agregada.', 'error');
-    valid = false;
+  }
+
+  // Un caso Pendiente o En Proceso puede guardarse incompleto (Ct y peso aún por
+  // llegar). Solo al marcarlo Finalizado se exige que los datos de laboratorio
+  // estén completos — ahí sí importa que no falte nada.
+  if (el('case-status').value === 'Finalizado') {
+    if (pathologyRows.length === 0) {
+      Utils.toast('Agrega al menos una patología analizada antes de finalizar el caso.', 'error');
+      valid = false;
+    } else if (pathologyRows.some((p) => p.samples.some((s) => s.ctObtained === null))) {
+      Utils.toast('Completa el Ct de todas las muestras antes de marcar el caso como Finalizado.', 'error');
+      valid = false;
+    }
   }
   return valid;
 }
@@ -905,6 +912,35 @@ el('export-case-pdf').addEventListener('click', () => {
   const rows = c && buildSingleCaseExportRows(c);
   if (!rows || !rows.length) return Utils.toast('Este caso no tiene patologías registradas para exportar.', 'error');
   exportRowsToPdf(rows, `caso_${c.caseNumber}.pdf`, `LIMS Salmones — Caso ${c.caseNumber}`);
+});
+
+function buildPathologyExportRows() {
+  return getSortedPathologies().map((p) => ({
+    Nombre: p.name,
+    'Ct de corte': p.ctCutoff,
+    'Incertidumbre inferior (±Ct)': p.ctUncertaintyLower || 0,
+    'Incertidumbre superior (±Ct)': p.ctUncertaintyUpper || 0,
+    Descripción: p.description || '',
+    Estado: p.status,
+  }));
+}
+
+el('export-pathologies-xlsx').addEventListener('click', () => {
+  const rows = buildPathologyExportRows();
+  if (!rows.length) return Utils.toast('No hay patologías para exportar.', 'error');
+  exportRowsToXlsx(rows, `patologias_lims_${Utils.todayISO()}.xlsx`);
+});
+
+el('export-pathologies-csv').addEventListener('click', () => {
+  const rows = buildPathologyExportRows();
+  if (!rows.length) return Utils.toast('No hay patologías para exportar.', 'error');
+  exportRowsToCsv(rows, `patologias_lims_${Utils.todayISO()}.csv`);
+});
+
+el('export-pathologies-pdf').addEventListener('click', () => {
+  const rows = buildPathologyExportRows();
+  if (!rows.length) return Utils.toast('No hay patologías para exportar.', 'error');
+  exportRowsToPdf(rows, `patologias_lims_${Utils.todayISO()}.pdf`, 'LIMS Salmones — Catálogo de Patologías');
 });
 
 // ============================================================
