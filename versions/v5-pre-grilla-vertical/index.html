@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LIMS Salmones — Seguimiento de Casos</title>
+<title>Trasabilidad Interna Operario v.1 (versión anterior) — Seguimiento de Casos</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -15,7 +15,7 @@
     <span class="topbar__logo">🧬</span>
     <div>
       <h1>Trasabilidad Interna Operario v.1</h1>
-      <span class="topbar__subtitle">by Nicolás Zúñiga</span>
+      <span class="topbar__subtitle">by Nicolás Zúñiga · versión anterior (grilla Ct horizontal)</span>
     </div>
   </div>
   <nav class="topbar__nav">
@@ -296,11 +296,20 @@
         <table class="data-table ct-matrix">
           <thead>
             <tr id="ct-matrix-head-row">
-              <th>Muestra</th>
-              <th>Peso (g)</th>
+              <th>Patología</th>
+              <th>Ct corte</th>
+              <th class="ct-col-obs">Observaciones</th>
+              <th class="ct-col-remove"></th>
             </tr>
           </thead>
-          <tbody id="sample-rows"></tbody>
+          <tbody>
+            <tr id="ct-matrix-weight-row">
+              <td colspan="2" class="weight-row-label">Peso (g) por muestra</td>
+              <td class="ct-col-obs"></td>
+              <td class="ct-col-remove"></td>
+            </tr>
+          </tbody>
+          <tbody id="pathology-rows"></tbody>
         </table>
       </div>
       <p id="pathology-rows-empty" class="empty-state">Agrega al menos una patología analizada.</p>

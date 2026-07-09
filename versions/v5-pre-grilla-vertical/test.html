@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>LIMS self-check</title></head>
+<body>
+<pre id="out"></pre>
+<div id="toast-container" style="display:none"></div>
+<script src="utils.js"></script>
+<script src="db.js"></script>
+<script>
+// ponytail: smoke test for the non-trivial bits (Ct→resultado logic, DB CRUD roundtrip).
+// No framework, run by opening this file directly in a browser.
+//
+// CRÍTICO: este archivo NUNCA debe tocar lims_cases_v1 / lims_pathologies_v1 —
+// esas son las claves reales de la app. Antes este self-check las borraba y
+// resembraba directamente, así que abrirlo en el mismo navegador que la app
+// real (mismo origen file://) reseteaba el catálogo de patologías real cada
+// vez que se corría. Se redirige STORAGE_KEYS a claves de scratch dedicadas
+// ANTES de tocar cualquier localStorage, para que quede aislado pase lo que pase.
+STORAGE_KEYS.CASES = 'lims_cases_selftest';
+STORAGE_KEYS.PATHOLOGIES = 'lims_pathologies_selftest';
+
+const results = [];
+function check(label, cond) { results.push(`${cond ? 'PASS' : 'FAIL'} — ${label}`); }
+
+check('El self-check está aislado de las claves reales de producción',
+  STORAGE_KEYS.CASES !== 'lims_cases_v1' && STORAGE_KEYS.PATHOLOGIES !== 'lims_pathologies_v1');
+
+// Ct cutoff logic (sin incertidumbre, debe igualar la regla original)
+check('Ct obtenido == cutoff => POSITIVO', Utils.calculateResult(35, 35) === 'POSITIVO');
+check('Ct obtenido < cutoff => POSITIVO', Utils.calculateResult(30, 35) === 'POSITIVO');
+check('Ct obtenido > cutoff => NEGATIVO', Utils.calculateResult(36, 35) === 'NEGATIVO');
+check('Ct vacío => null', Utils.calculateResult('', 35) === null);
+
+// Zona gris (incertidumbre inferior/superior)
+check('Ct dentro de zona gris => OBSERVAR', Utils.calculateResult(35.5, 35, 1, 1) === 'OBSERVAR');
+check('Ct justo bajo el límite inferior => POSITIVO', Utils.calculateResult(34, 35, 1, 1) === 'POSITIVO');
+check('Ct justo sobre el límite superior => NEGATIVO', Utils.calculateResult(36.1, 35, 1, 1) === 'NEGATIVO');
+check('Ct en el borde superior de la zona gris => OBSERVAR', Utils.calculateResult(36, 35, 1, 1) === 'OBSERVAR');
+
+// Paginación (tabla de Casos / Explorar sobre catálogos de miles de registros)
+const bigList = Array.from({ length: 130 }, (_, i) => i);
+const p1 = Utils.paginate(bigList, 1, 50);
+check('paginate: página 1 trae 50 ítems', p1.items.length === 50 && p1.items[0] === 0);
+const p3 = Utils.paginate(bigList, 3, 50);
+check('paginate: última página trae el resto (30)', p3.items.length === 30 && p3.totalPages === 3);
+const pOver = Utils.paginate(bigList, 99, 50);
+check('paginate: página fuera de rango se clampa a la última', pOver.page === 3);
+const pEmpty = Utils.paginate([], 1, 50);
+check('paginate: lista vacía no rompe (1 de 1)', pEmpty.totalPages === 1 && pEmpty.items.length === 0);
+
+// localStorage reset for a clean run
+localStorage.removeItem(STORAGE_KEYS.CASES);
+localStorage.removeItem(STORAGE_KEYS.PATHOLOGIES);
+DB.init();
+
+const pathologies = DB.pathologies.getAll();
+check('Seed carga 9 patologías', pathologies.length === 9);
+
+const srs = pathologies.find((p) => p.name.includes('SRS'));
+check('Seed incluye SRS con Ct de corte 35', srs && srs.ctCutoff === 35);
+
+// Importar casos: filas planas (como las de "Exportar caso") => caso reconstruido
+check('parseDisplayDate convierte DD-MM-YYYY a ISO', Utils.parseDisplayDate('07-07-2026') === '2026-07-07');
+check('parseSampleLabelIndex "M3" => índice 2', Utils.parseSampleLabelIndex('M3') === 2);
+
+const missingColsError = Utils.validateCaseImportColumns([{ Foo: 1 }]);
+check('validateCaseImportColumns rechaza un archivo sin las columnas esperadas',
+  typeof missingColsError === 'string' && missingColsError.includes('Faltan columnas'));
+
+const exportedLikeRows = [
+  { 'N° Caso': 'IMP-001', Fecha: '07-07-2026', Cliente: 'Cliente Import', Matriz: 'Riñón', Muestra: 'M1', 'Peso (g)': 38, Patología: srs.name, 'Ct corte': srs.ctCutoff, 'Ct obtenido': 30, Resultado: 'POSITIVO', Observaciones: '' },
+  { 'N° Caso': 'IMP-001', Fecha: '07-07-2026', Cliente: 'Cliente Import', Matriz: 'Riñón', Muestra: 'M2', 'Peso (g)': '', Patología: srs.name, 'Ct corte': srs.ctCutoff, 'Ct obtenido': '', Resultado: '', Observaciones: '' },
+];
+check('validateCaseImportColumns acepta las columnas de exportación', Utils.validateCaseImportColumns(exportedLikeRows) === null);
+
+const importedCases = Utils.buildCasesFromImportRows(exportedLikeRows, pathologies);
+check('buildCasesFromImportRows agrupa 2 filas de 1 caso en 1 objeto', importedCases.length === 1);
+const imp = importedCases[0];
+check('buildCasesFromImportRows arma N° muestras y peso por muestra', imp.sampleCount === 2 && imp.sampleWeights[0] === 38 && imp.sampleWeights[1] === null);
+check('buildCasesFromImportRows recalcula el resultado en vez de confiar en la columna',
+  imp.pathologies[0].samples[0].result === 'POSITIVO' && imp.pathologies[0].samples[1].result === null);
+check('buildCasesFromImportRows marca Pendiente si falta algún Ct', imp.status === 'Pendiente');
+check('buildCasesFromImportRows matchea la patología del catálogo por nombre', imp.pathologies[0].pathologyId === srs.id);
+
+// Caso con 3 muestras: mismo patógeno, un Ct por muestra (grilla patología x muestra)
+const created = DB.cases.create({
+  caseNumber: 'TEST-001',
+  date: '2026-07-07',
+  client: 'Cliente Test',
+  sampleCount: 3,
+  matrix: 'Riñón',
+  sampleWeights: [40, 41.5, null],
+  status: 'Pendiente',
+  observations: '',
+  pathologies: [{
+    pathologyId: srs.id,
+    name: srs.name,
+    ctCutoff: srs.ctCutoff,
+    ctUncertaintyLower: 0,
+    ctUncertaintyUpper: 0,
+    observations: '',
+    samples: [
+      { ctObtained: 30, result: Utils.calculateResult(30, srs.ctCutoff) },
+      { ctObtained: 40, result: Utils.calculateResult(40, srs.ctCutoff) },
+      { ctObtained: null, result: null },
+    ],
+  }],
+});
+check('DB.cases.create persiste y devuelve id', !!created.id);
+check('DB.cases.getAll refleja el caso creado', DB.cases.getAll().length === 1);
+check('sampleWeights persiste un peso por muestra', created.sampleWeights[0] === 40 && created.sampleWeights[2] === null);
+
+const flat = Utils.flattenCaseResults(created);
+check('flattenCaseResults ignora la muestra sin Ct', flat.length === 2);
+check('flattenCaseResults cuenta 1 positivo (M1) y 1 negativo (M2)',
+  flat.filter((r) => r.result === 'POSITIVO').length === 1 && flat.filter((r) => r.result === 'NEGATIVO').length === 1);
+
+DB.cases.update(created.id, { status: 'Finalizado' });
+check('DB.cases.update persiste cambios', DB.cases.getById(created.id).status === 'Finalizado');
+
+DB.cases.remove(created.id);
+check('DB.cases.remove elimina el caso', DB.cases.getAll().length === 0);
+
+// limpieza de las claves de scratch (aisladas, no tocan datos reales)
+localStorage.removeItem(STORAGE_KEYS.CASES);
+localStorage.removeItem(STORAGE_KEYS.PATHOLOGIES);
+
+document.getElementById('out').textContent = results.join('\n') +
+  `\n\n${results.every((r) => r.startsWith('PASS')) ? 'TODO OK' : 'HAY FALLOS'}`;
+</script>
+</body>
+</html>

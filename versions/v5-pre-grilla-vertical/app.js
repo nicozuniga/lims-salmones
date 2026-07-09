@@ -17,6 +17,7 @@ const casesTbody = el('cases-tbody');
 const casesEmpty = el('cases-empty');
 const pathologiesTbody = el('pathologies-tbody');
 const pathologiesEmpty = el('pathologies-empty');
+const pathologyRowsContainer = el('pathology-rows');
 const pathologyRowsEmpty = el('pathology-rows-empty');
 
 // ponytail: paginar la tabla en vez de pintar miles de <tr> de una — el catálogo de
@@ -279,8 +280,6 @@ explorerTbody.addEventListener('click', handleCaseRowAction);
 // Modal: Nuevo / Editar Caso
 // ============================================================
 const caseForm = el('case-form');
-const sampleRowsContainer = el('sample-rows');
-let pathologyColumnCounter = 0;
 
 function populatePathologySelect(select, selectedId) {
   const list = DB.pathologies.getAll().filter((p) => p.status === 'Activo' || p.id === selectedId);
@@ -289,10 +288,10 @@ function populatePathologySelect(select, selectedId) {
 }
 
 function toggleEmptyRowsMessage() {
-  pathologyRowsEmpty.hidden = el('ct-matrix-head-row').querySelectorAll('.pathology-col').length > 0;
+  pathologyRowsEmpty.hidden = pathologyRowsContainer.children.length > 0;
 }
 
-/** N° de muestras vigente en el formulario = cantidad de filas M1..MN de la grilla. */
+/** N° de muestras vigente en el formulario = cantidad de celdas de Ct por patología. */
 function getSampleCount() {
   return Math.max(0, parseInt(el('case-samples').value, 10) || 0);
 }
@@ -303,134 +302,148 @@ function updateAddPathologyAvailability() {
   el('matrix-hint').hidden = count >= 1;
 }
 
-/** Crea la celda de Ct de una muestra para una columna (patología) dada. */
-function addCtCellToRow(tr, colTh) {
-  const td = document.createElement('td');
-  td.className = 'ct-cell';
-  td.dataset.colId = colTh.dataset.colId;
-  const input = document.createElement('input');
-  input.type = 'number';
-  input.step = '0.01';
-  input.className = 'input ph-ct-cell';
-  input.addEventListener('input', () => syncCellResult(input, colTh));
-  td.appendChild(input);
-  tr.appendChild(td);
-  return td;
-}
-
-/** Agrega o quita filas de muestra (M1..MN, en vertical) para igualar el N° de muestras vigente. */
-function renderSampleRows() {
-  const existingRows = Array.from(sampleRowsContainer.querySelectorAll('.sample-row'));
-  const count = getSampleCount();
-
-  existingRows.slice(count).forEach((row) => row.remove());
-
-  const pathologyCols = Array.from(el('ct-matrix-head-row').querySelectorAll('.pathology-col'));
-  for (let i = existingRows.length; i < count; i += 1) {
-    const tr = document.createElement('tr');
-    tr.className = 'sample-row';
-
-    const labelTd = document.createElement('td');
-    labelTd.className = 'sample-label';
-    labelTd.textContent = `M${i + 1}`;
-    tr.appendChild(labelTd);
-
-    const weightTd = document.createElement('td');
-    const weightInput = document.createElement('input');
-    weightInput.type = 'number';
-    weightInput.step = '0.1';
-    weightInput.min = '0';
-    weightInput.placeholder = 'g';
-    weightInput.className = 'input ph-weight-cell';
-    weightTd.appendChild(weightInput);
-    tr.appendChild(weightTd);
-
-    pathologyCols.forEach((th) => addCtCellToRow(tr, th));
-    sampleRowsContainer.appendChild(tr);
+/** Regenera las columnas M1..MN del encabezado de la grilla según el N° de muestras. */
+function renderSampleColumnsHeader() {
+  const headRow = el('ct-matrix-head-row');
+  const obsHeader = headRow.querySelector('.ct-col-obs');
+  headRow.querySelectorAll('.ct-col-sample').forEach((th) => th.remove());
+  for (let i = 0; i < getSampleCount(); i += 1) {
+    const th = document.createElement('th');
+    th.className = 'ct-col-sample';
+    th.textContent = `M${i + 1}`;
+    th.title = `Muestra ${i + 1}`;
+    headRow.insertBefore(th, obsHeader);
   }
 }
 
-function syncCellResult(input, colTh) {
-  const cutoff = colTh.querySelector('.ph-cutoff').value;
-  const result = Utils.calculateResult(input.value, cutoff, colTh.dataset.ctLower, colTh.dataset.ctUpper);
+/** Ajusta las celdas de Ct de una fila (agrega o quita) para igualar el N° de muestras vigente. */
+function resizeRowSampleCells(row) {
+  const obsCell = row.querySelector('.ct-col-obs');
+  const existingCells = Array.from(row.querySelectorAll('.ct-cell'));
+  const count = getSampleCount();
+
+  existingCells.slice(count).forEach((cell) => cell.remove());
+
+  for (let i = existingCells.length; i < count; i += 1) {
+    const td = document.createElement('td');
+    td.className = 'ct-cell';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = '0.01';
+    input.className = 'input ph-ct-cell';
+    input.dataset.sampleIndex = String(i);
+    input.addEventListener('input', () => syncCellResult(row, input));
+    td.appendChild(input);
+    row.insertBefore(td, obsCell);
+  }
+}
+
+function syncCellResult(row, input) {
+  const cutoff = row.querySelector('.ph-cutoff').value;
+  const result = Utils.calculateResult(input.value, cutoff, row.dataset.ctLower, row.dataset.ctUpper);
   input.classList.remove('input--positive', 'input--negative', 'input--observe');
   input.title = result || '';
   if (result) input.classList.add(`input--${result === 'POSITIVO' ? 'positive' : result === 'NEGATIVO' ? 'negative' : 'observe'}`);
 }
 
-function syncAllCellsForColumn(colTh) {
-  const selector = `.ct-cell[data-col-id="${colTh.dataset.colId}"] .ph-ct-cell`;
-  sampleRowsContainer.querySelectorAll(selector).forEach((input) => syncCellResult(input, colTh));
+function syncAllCellsInRow(row) {
+  row.querySelectorAll('.ph-ct-cell').forEach((input) => syncCellResult(row, input));
+}
+
+/** Ajusta las celdas de Peso (g), una por muestra, igual que resizeRowSampleCells pero sin cálculo de resultado. */
+function resizeWeightRowCells() {
+  const row = el('ct-matrix-weight-row');
+  const obsCell = row.querySelector('.ct-col-obs');
+  const existingCells = Array.from(row.querySelectorAll('.weight-cell'));
+  const count = getSampleCount();
+
+  existingCells.slice(count).forEach((cell) => cell.remove());
+
+  for (let i = existingCells.length; i < count; i += 1) {
+    const td = document.createElement('td');
+    td.className = 'ct-cell weight-cell';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = '0.1';
+    input.min = '0';
+    input.className = 'input ph-weight-cell';
+    input.placeholder = 'g';
+    input.dataset.sampleIndex = String(i);
+    td.appendChild(input);
+    row.insertBefore(td, obsCell);
+  }
 }
 
 function collectSampleWeights() {
-  return Array.from(sampleRowsContainer.querySelectorAll('.ph-weight-cell'))
+  return Array.from(document.querySelectorAll('#ct-matrix-weight-row .ph-weight-cell'))
     .map((input) => (input.value === '' ? null : Number(input.value)));
 }
 
-/** Agrega una columna de patología (encabezado + una celda de Ct por cada fila de muestra ya existente). */
-function addPathologyColumn(existingData = null) {
-  pathologyColumnCounter += 1;
-  const colId = `col-${pathologyColumnCounter}`;
+function addPathologyRow(existingData = null) {
+  const row = document.createElement('tr');
+  row.className = 'pathology-row';
 
-  const th = document.createElement('th');
-  th.className = 'pathology-col';
-  th.dataset.colId = colId;
-
+  const selectTd = document.createElement('td');
   const select = document.createElement('select');
   select.className = 'ph-select input';
   select.required = true;
+  selectTd.appendChild(select);
 
+  const cutoffTd = document.createElement('td');
   const cutoffInput = document.createElement('input');
   cutoffInput.type = 'text';
   cutoffInput.className = 'ph-cutoff input';
   cutoffInput.readOnly = true;
   cutoffInput.tabIndex = -1;
-  cutoffInput.placeholder = 'Ct corte';
+  cutoffTd.appendChild(cutoffInput);
 
+  const obsTd = document.createElement('td');
+  obsTd.className = 'ct-col-obs';
   const obsInput = document.createElement('input');
   obsInput.type = 'text';
   obsInput.className = 'ph-obs input';
-  obsInput.placeholder = 'Observaciones';
+  obsTd.appendChild(obsInput);
 
+  const removeTd = document.createElement('td');
+  removeTd.className = 'ct-col-remove';
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
   removeBtn.className = 'row-remove';
   removeBtn.title = 'Quitar patología';
-  removeBtn.textContent = '✕ Quitar';
+  removeBtn.textContent = '✕';
+  removeTd.appendChild(removeBtn);
 
-  th.append(select, cutoffInput, obsInput, removeBtn);
-  el('ct-matrix-head-row').appendChild(th);
+  row.append(selectTd, cutoffTd, obsTd, removeTd);
   populatePathologySelect(select, existingData?.pathologyId);
 
   function syncCutoff() {
     const ph = DB.pathologies.getById(select.value);
     cutoffInput.value = ph ? ph.ctCutoff : '';
-    th.dataset.ctLower = ph ? (ph.ctUncertaintyLower || 0) : 0;
-    th.dataset.ctUpper = ph ? (ph.ctUncertaintyUpper || 0) : 0;
-    syncAllCellsForColumn(th);
+    row.dataset.ctLower = ph ? (ph.ctUncertaintyLower || 0) : 0;
+    row.dataset.ctUpper = ph ? (ph.ctUncertaintyUpper || 0) : 0;
+    syncAllCellsInRow(row);
   }
 
   select.addEventListener('change', syncCutoff);
   removeBtn.addEventListener('click', () => {
-    sampleRowsContainer.querySelectorAll(`.ct-cell[data-col-id="${colId}"]`).forEach((td) => td.remove());
-    th.remove();
+    row.remove();
     toggleEmptyRowsMessage();
   });
 
-  sampleRowsContainer.querySelectorAll('.sample-row').forEach((tr) => addCtCellToRow(tr, th));
+  pathologyRowsContainer.appendChild(row);
+  resizeRowSampleCells(row);
 
   if (existingData) {
     select.value = existingData.pathologyId;
     cutoffInput.value = existingData.ctCutoff;
-    th.dataset.ctLower = existingData.ctUncertaintyLower ?? 0;
-    th.dataset.ctUpper = existingData.ctUncertaintyUpper ?? 0;
+    row.dataset.ctLower = existingData.ctUncertaintyLower ?? 0;
+    row.dataset.ctUpper = existingData.ctUncertaintyUpper ?? 0;
     obsInput.value = existingData.observations || '';
-    const cells = sampleRowsContainer.querySelectorAll(`.ct-cell[data-col-id="${colId}"] .ph-ct-cell`);
+    const cells = row.querySelectorAll('.ph-ct-cell');
     (existingData.samples || []).forEach((s, idx) => {
       if (cells[idx] && s && s.ctObtained !== null && s.ctObtained !== undefined) cells[idx].value = s.ctObtained;
     });
-    syncAllCellsForColumn(th);
+    syncAllCellsInRow(row);
   } else {
     syncCutoff();
   }
@@ -442,16 +455,21 @@ function resetCaseForm() {
   caseForm.reset();
   el('case-id').value = '';
   el('case-date').value = Utils.todayISO();
-  el('ct-matrix-head-row').querySelectorAll('.pathology-col').forEach((th) => th.remove());
-  sampleRowsContainer.innerHTML = '';
-  pathologyColumnCounter = 0;
+  pathologyRowsContainer.innerHTML = '';
+  renderSampleColumnsHeader();
+  resizeWeightRowCells();
   updateAddPathologyAvailability();
   toggleEmptyRowsMessage();
   caseForm.querySelectorAll('.input--error').forEach((i) => Utils.clearFieldError(i));
 }
 
 el('case-samples').addEventListener('input', () => {
-  renderSampleRows();
+  renderSampleColumnsHeader();
+  resizeWeightRowCells();
+  Array.from(pathologyRowsContainer.querySelectorAll('.pathology-row')).forEach((row) => {
+    resizeRowSampleCells(row);
+    syncAllCellsInRow(row);
+  });
   updateAddPathologyAvailability();
 });
 
@@ -469,13 +487,14 @@ function openCaseModal(id = null) {
     el('case-matrix').value = c.matrix || '';
     el('case-status').value = c.status || 'Pendiente';
     el('case-observations').value = c.observations || '';
-    renderSampleRows();
-    const weightInputs = sampleRowsContainer.querySelectorAll('.ph-weight-cell');
+    renderSampleColumnsHeader();
+    resizeWeightRowCells();
+    const weightCells = document.querySelectorAll('#ct-matrix-weight-row .ph-weight-cell');
     (c.sampleWeights || []).forEach((w, i) => {
-      if (weightInputs[i] && w !== null && w !== undefined) weightInputs[i].value = w;
+      if (weightCells[i] && w !== null && w !== undefined) weightCells[i].value = w;
     });
     updateAddPathologyAvailability();
-    (c.pathologies || []).forEach((p) => addPathologyColumn(p));
+    (c.pathologies || []).forEach((p) => addPathologyRow(p));
   } else {
     el('case-modal-title').textContent = 'Nuevo Caso';
   }
@@ -483,17 +502,16 @@ function openCaseModal(id = null) {
 }
 
 el('btn-new-case').addEventListener('click', () => openCaseModal());
-el('btn-add-pathology-row').addEventListener('click', () => addPathologyColumn());
+el('btn-add-pathology-row').addEventListener('click', () => addPathologyRow());
 
 function collectPathologyRows() {
-  return Array.from(el('ct-matrix-head-row').querySelectorAll('.pathology-col')).map((th) => {
-    const select = th.querySelector('.ph-select');
+  return Array.from(pathologyRowsContainer.querySelectorAll('.pathology-row')).map((row) => {
+    const select = row.querySelector('.ph-select');
     const ph = DB.pathologies.getById(select.value);
-    const ctCutoff = th.querySelector('.ph-cutoff').value;
-    const ctLower = th.dataset.ctLower || 0;
-    const ctUpper = th.dataset.ctUpper || 0;
-    const cells = sampleRowsContainer.querySelectorAll(`.ct-cell[data-col-id="${th.dataset.colId}"] .ph-ct-cell`);
-    const samples = Array.from(cells).map((input) => {
+    const ctCutoff = row.querySelector('.ph-cutoff').value;
+    const ctLower = row.dataset.ctLower || 0;
+    const ctUpper = row.dataset.ctUpper || 0;
+    const samples = Array.from(row.querySelectorAll('.ph-ct-cell')).map((input) => {
       const ctObtained = input.value;
       return {
         ctObtained: ctObtained === '' ? null : Number(ctObtained),
@@ -506,7 +524,7 @@ function collectPathologyRows() {
       ctCutoff: Number(ctCutoff),
       ctUncertaintyLower: Number(ctLower) || 0,
       ctUncertaintyUpper: Number(ctUpper) || 0,
-      observations: th.querySelector('.ph-obs').value.trim(),
+      observations: row.querySelector('.ph-obs').value.trim(),
       samples,
     };
   });
@@ -597,25 +615,24 @@ function openViewCaseModal(id) {
   currentViewCaseId = id;
 
   const sampleCount = c.sampleCount || 0;
-  const pathologies = c.pathologies || [];
-  const pathologyHeaders = pathologies
-    .map((p) => `<th>${Utils.escapeHtml(p.name)}<br><span class="detail-label">Ct corte ${p.ctCutoff}</span></th>`)
-    .join('');
+  const sampleHeaders = Array.from({ length: sampleCount }, (_, i) => `<th>M${i + 1}</th>`).join('');
 
-  const rows = Array.from({ length: sampleCount }, (_, i) => {
-    const weight = (c.sampleWeights || [])[i];
-    const cells = pathologies.map((p) => {
+  const weightCells = Array.from({ length: sampleCount }, (_, i) => {
+    const w = (c.sampleWeights || [])[i];
+    return `<td>${w !== null && w !== undefined ? w : '—'}</td>`;
+  }).join('');
+  const weightRow = sampleCount
+    ? `<tr><td colspan="2" class="weight-row-label">Peso (g) por muestra</td>${weightCells}<td></td></tr>`
+    : '';
+
+  const rows = (c.pathologies || []).map((p) => {
+    const cells = Array.from({ length: sampleCount }, (_, i) => {
       const s = (p.samples || [])[i];
       const ctVal = s && s.ctObtained !== null && s.ctObtained !== undefined ? s.ctObtained : '—';
       return `<td><span class="result-badge${resultBadgeClass(s?.result)}">${ctVal}</span></td>`;
     }).join('');
-    return `<tr><td class="sample-label">M${i + 1}</td><td>${weight !== null && weight !== undefined ? weight : '—'}</td>${cells}</tr>`;
+    return `<tr><td>${Utils.escapeHtml(p.name)}</td><td>${p.ctCutoff}</td>${cells}<td>${Utils.escapeHtml(p.observations || '—')}</td></tr>`;
   }).join('');
-
-  const obsList = pathologies
-    .filter((p) => p.observations)
-    .map((p) => `<li><strong>${Utils.escapeHtml(p.name)}:</strong> ${Utils.escapeHtml(p.observations)}</li>`)
-    .join('');
 
   el('view-case-body').innerHTML = `
     <div class="detail-grid">
@@ -627,11 +644,10 @@ function openViewCaseModal(id) {
       <div><span class="detail-label">Estado</span><span class="badge ${statusBadgeClass(c.status)}">${Utils.escapeHtml(c.status || 'Pendiente')}</span></div>
     </div>
     ${c.observations ? `<p><strong>Observaciones:</strong> ${Utils.escapeHtml(c.observations)}</p>` : ''}
-    ${obsList ? `<p><strong>Observaciones por patología:</strong></p><ul>${obsList}</ul>` : ''}
     <div class="table-wrapper">
       <table class="data-table ct-matrix">
-        <thead><tr><th>Muestra</th><th>Peso (g)</th>${pathologyHeaders}</tr></thead>
-        <tbody>${rows || `<tr><td colspan="${pathologies.length + 2}">Sin muestras registradas.</td></tr>`}</tbody>
+        <thead><tr><th>Patología</th><th>Ct corte</th>${sampleHeaders}<th>Observaciones</th></tr></thead>
+        <tbody>${weightRow}${rows || `<tr><td colspan="${sampleCount + 3}">Sin patologías registradas.</td></tr>`}</tbody>
       </table>
     </div>`;
 

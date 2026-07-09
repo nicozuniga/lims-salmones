@@ -357,30 +357,27 @@ h1, h2, h3 { margin: 0; color: var(--blue); }
 }
 .section-divider h3 { font-size: 14px; }
 
-/* Grilla Muestra (fila, vertical) x Patología (columna) para el ingreso de Ct */
+/* Grilla Patología x Muestra para el ingreso de Ct */
 .ct-matrix-wrapper { margin-bottom: 10px; }
 .ct-matrix { min-width: 0; }
 .ct-matrix th, .ct-matrix td { padding: 8px 6px; white-space: nowrap; }
-.ct-matrix .sample-label { font-weight: 600; color: var(--blue); }
-.ct-matrix .ph-weight-cell { width: 70px; text-align: center; }
-
-.ct-matrix th.pathology-col { vertical-align: top; white-space: normal; min-width: 170px; background: var(--gray-light); }
-.ct-matrix th.pathology-col .ph-select,
-.ct-matrix th.pathology-col .ph-cutoff,
-.ct-matrix th.pathology-col .ph-obs { display: block; width: 100%; margin-bottom: 4px; font-weight: 400; text-transform: none; letter-spacing: normal; }
-.ct-matrix th.pathology-col .ph-cutoff { text-align: center; background: var(--white); }
-
+.ct-matrix .ph-select { min-width: 210px; }
+.ct-matrix .ph-cutoff { width: 64px; text-align: center; background: var(--gray-light); }
+.ct-matrix .ph-obs { min-width: 150px; }
 .ct-matrix .ct-cell input { width: 60px; text-align: center; padding: 6px 4px; font-weight: 600; }
 .ct-matrix .ct-cell input.input--positive { background: var(--red-bg); border-color: var(--red); color: var(--red); }
 .ct-matrix .ct-cell input.input--negative { background: var(--green-bg); border-color: var(--green); color: var(--green); }
 .ct-matrix .ct-cell input.input--observe { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
 
+.weight-row-label { font-size: 12px; font-weight: 600; color: var(--gray-dark); background: var(--gray-light); }
+#ct-matrix-weight-row td { border-bottom: 2px solid var(--gray-light); }
+
 .row-remove {
   border: none;
   background: var(--red-bg);
   color: var(--red);
-  width: 100%;
-  height: 26px;
+  width: 30px;
+  height: 34px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 700;
@@ -429,4 +426,5 @@ h1, h2, h3 { margin: 0; color: var(--blue); }
   .topbar { flex-direction: column; align-items: flex-start; }
   .main { padding: 14px; }
   #search-input { min-width: 100%; }
+  .pathology-row { grid-template-columns: 1fr; }
 }
