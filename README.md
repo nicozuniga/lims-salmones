@@ -31,6 +31,11 @@ Navegadores recomendados: Chrome, Edge o Firefox actualizados.
 - Borrar el historial/datos de navegación de ese navegador borra la base local. Usa los botones de exportar (Excel/CSV/PDF) como respaldo periódico.
 - `localStorage` tiene un límite típico de 5–10&nbsp;MB por navegador, suficiente para varios miles de casos. Si se acerca al límite, la app te avisa con una notificación al guardar en vez de perder el caso en silencio.
 - La tabla de Casos y la pestaña Explorar están paginadas (50 filas por página) para mantenerse rápidas aunque el catálogo crezca a miles de registros.
+- **Importar / restaurar casos**: el botón "Importar" en la pestaña Casos acepta un CSV o Excel con las mismas columnas que genera "Exportar caso" (N° Caso, Fecha, Cliente, Matriz, Muestra, Peso (g), Patología, Ct corte, Ct obtenido, Resultado, Observaciones). Sirve tanto para carga masiva como para restaurar casos a partir de una exportación anterior: si el N° de Caso ya existe, lo actualiza; si no, lo crea.
+
+## Nota sobre `test.html`
+
+El self-check usa claves de `localStorage` propias (`lims_cases_selftest` / `lims_pathologies_selftest`), completamente separadas de las reales. Puede abrirse en cualquier navegador, incluso el mismo que usas para la app real, sin riesgo de perder datos.
 
 ## Migrar a una base de datos real (SQLite / API)
 

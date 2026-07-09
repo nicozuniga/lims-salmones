@@ -59,29 +59,6 @@ check('Seed carga 9 patologías', pathologies.length === 9);
 const srs = pathologies.find((p) => p.name.includes('SRS'));
 check('Seed incluye SRS con Ct de corte 35', srs && srs.ctCutoff === 35);
 
-// Importar casos: filas planas (como las de "Exportar caso") => caso reconstruido
-check('parseDisplayDate convierte DD-MM-YYYY a ISO', Utils.parseDisplayDate('07-07-2026') === '2026-07-07');
-check('parseSampleLabelIndex "M3" => índice 2', Utils.parseSampleLabelIndex('M3') === 2);
-
-const missingColsError = Utils.validateCaseImportColumns([{ Foo: 1 }]);
-check('validateCaseImportColumns rechaza un archivo sin las columnas esperadas',
-  typeof missingColsError === 'string' && missingColsError.includes('Faltan columnas'));
-
-const exportedLikeRows = [
-  { 'N° Caso': 'IMP-001', Fecha: '07-07-2026', Cliente: 'Cliente Import', Matriz: 'Riñón', Muestra: 'M1', 'Peso (g)': 38, Patología: srs.name, 'Ct corte': srs.ctCutoff, 'Ct obtenido': 30, Resultado: 'POSITIVO', Observaciones: '' },
-  { 'N° Caso': 'IMP-001', Fecha: '07-07-2026', Cliente: 'Cliente Import', Matriz: 'Riñón', Muestra: 'M2', 'Peso (g)': '', Patología: srs.name, 'Ct corte': srs.ctCutoff, 'Ct obtenido': '', Resultado: '', Observaciones: '' },
-];
-check('validateCaseImportColumns acepta las columnas de exportación', Utils.validateCaseImportColumns(exportedLikeRows) === null);
-
-const importedCases = Utils.buildCasesFromImportRows(exportedLikeRows, pathologies);
-check('buildCasesFromImportRows agrupa 2 filas de 1 caso en 1 objeto', importedCases.length === 1);
-const imp = importedCases[0];
-check('buildCasesFromImportRows arma N° muestras y peso por muestra', imp.sampleCount === 2 && imp.sampleWeights[0] === 38 && imp.sampleWeights[1] === null);
-check('buildCasesFromImportRows recalcula el resultado en vez de confiar en la columna',
-  imp.pathologies[0].samples[0].result === 'POSITIVO' && imp.pathologies[0].samples[1].result === null);
-check('buildCasesFromImportRows marca Pendiente si falta algún Ct', imp.status === 'Pendiente');
-check('buildCasesFromImportRows matchea la patología del catálogo por nombre', imp.pathologies[0].pathologyId === srs.id);
-
 // Caso con 3 muestras: mismo patógeno, un Ct por muestra (grilla patología x muestra)
 const created = DB.cases.create({
   caseNumber: 'TEST-001',
